@@ -89,6 +89,11 @@ class Connection
     private $scopes = [];
 
     /**
+     * @var int|null
+     */
+    private $lastReceivedTotalCount = null;
+
+    /**
      * @return Client
      */
     private function client()
@@ -217,6 +222,9 @@ class Connection
         try {
             $request = $this->createRequest('GET', $this->formatUrl($url, 'get'), null, $params);
             $response = $this->client()->send($request);
+
+            $this->lastReceivedTotalCount = $response->getHeaderLine("X-Total-Count") ?
+                intval($response->getHeaderLine("X-Total-Count")) : null;
 
             $json = $this->parseResponse($response);
 
@@ -606,5 +614,13 @@ class Connection
     public function setScopes($scopes)
     {
         $this->scopes = $scopes;
+    }
+
+    /**
+     * @return int|null
+     */
+    public function getLastReceivedTotalCount()
+    {
+        return $this->lastReceivedTotalCount;
     }
 }
