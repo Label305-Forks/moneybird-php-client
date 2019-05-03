@@ -1,19 +1,20 @@
-<?php namespace Picqer\Financials\Moneybird;
+<?php
+
+namespace Picqer\Financials\Moneybird;
 
 use Exception;
-use GuzzleHttp\Client;
-use GuzzleHttp\Exception\BadResponseException;
-use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7;
+use GuzzleHttp\Client;
+use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
-use Picqer\Financials\Moneybird\Exceptions\Api\TooManyRequestsException;
-use Picqer\Financials\Moneybird\Exceptions\ApiException;
 use Psr\Http\Message\ResponseInterface;
+use GuzzleHttp\Exception\BadResponseException;
+use Picqer\Financials\Moneybird\Exceptions\ApiException;
+use Picqer\Financials\Moneybird\Exceptions\Api\TooManyRequestsException;
 
 /**
- * Class Connection
- * @package Picqer\Financials\Moneybird
+ * Class Connection.
  */
 class Connection
 {
@@ -56,6 +57,11 @@ class Connection
      * @var
      */
     private $accessToken;
+
+    /**
+     * @var
+     */
+    private $refreshToken;
 
     /**
      * @var
@@ -106,7 +112,7 @@ class Connection
     }
 
     /**
-     * Insert a Middleware for the Guzzle Client
+     * Insert a Middleware for the Guzzle Client.
      * @param $middleWare
      */
     public function insertMiddleWare($middleWare)
@@ -145,7 +151,7 @@ class Connection
         // Add default json headers to the request
         $headers = array_merge($headers, [
             'Accept' => 'application/json',
-            'Content-Type' => 'application/json'
+            'Content-Type' => 'application/json',
         ]);
 
         // If access token is not set or token has expired, acquire new token
@@ -159,10 +165,40 @@ class Connection
         }
 
         // Create param string
-        if (!empty($params)) {
+        if (! empty($params)) {
             $endpoint .= '?' . http_build_query($params);
         }
 
+        // Create the request
+        $request = new Request($method, $endpoint, $headers, $body);
+
+        return $request;
+    }
+
+    /**
+     * @param string $method
+     * @param $endpoint
+     * @param null $body
+     * @param array $params
+     * @param array $headers
+     *
+     * @return \GuzzleHttp\Psr7\Request
+     * @throws \Picqer\Financials\Moneybird\Exceptions\ApiException
+     */
+    private function createRequestNoJson($method = 'GET', $endpoint, $body = null, array $params = [], array $headers = [])
+    {
+        // If access token is not set or token has expired, acquire new token
+        if (empty($this->accessToken)) {
+            $this->acquireAccessToken();
+        }
+        // If we have a token, sign the request
+        if (! empty($this->accessToken)) {
+            $headers['Authorization'] = 'Bearer ' . $this->accessToken;
+        }
+        // Create param string
+        if (! empty($params)) {
+            $endpoint .= '?' . http_build_query($params);
+        }
         // Create the request
         $request = new Request($method, $endpoint, $headers, $body);
 
@@ -235,13 +271,14 @@ class Connection
 
     /**
      * @param string $url
+     * @param string $body
      * @return mixed
      * @throws ApiException
      */
-    public function delete($url)
+    public function delete($url, $body = null)
     {
         try {
-            $request = $this->createRequest('DELETE', $this->formatUrl($url, 'delete'));
+            $request = $this->createRequest('DELETE', $this->formatUrl($url, 'delete'), $body);
             $response = $this->client()->send($request);
 
             return $this->parseResponse($response);
@@ -251,16 +288,35 @@ class Connection
     }
 
     /**
+     * @param string $url
+     * @param array $options
+     * @return mixed
+     * @throws ApiException
+     */
+    public function upload($url, $options)
+    {
+        try {
+            $request = $this->createRequestNoJson('POST', $this->formatUrl($url, 'post'), null);
+
+            $response = $this->client()->send($request, $options);
+
+            return $this->parseResponse($response);
+        } catch (Exception $e) {
+            $this->parseExceptionForErrorMessages($e);
+        }
+    }
+
+    /**
      * @return string
      */
-    private function getAuthUrl()
+    public function getAuthUrl()
     {
-        return $this->authUrl . '?' . http_build_query(array(
+        return $this->authUrl . '?' . http_build_query([
             'client_id' => $this->clientId,
             'redirect_uri' => $this->redirectUrl,
             'response_type' => 'code',
-            'scope' => $this->scopes ? implode(' ', $this->scopes) : 'sales_invoices documents estimates bank settings'
-        ));
+            'scope' => $this->scopes ? implode(' ', $this->scopes) : 'sales_invoices documents estimates bank settings',
+        ]);
     }
 
     /**
@@ -367,6 +423,14 @@ class Connection
     }
 
     /**
+     * @return mixed
+     */
+    public function getRefreshToken()
+    {
+        return $this->refreshToken;
+    }
+
+    /**
      * @throws ApiException
      */
     private function acquireAccessToken()
@@ -378,7 +442,7 @@ class Connection
                 'client_id' => $this->clientId,
                 'client_secret' => $this->clientSecret,
                 'code' => $this->authorizationCode,
-            ]
+            ],
         ];
 
         $response = $this->client()->post($this->getTokenUrl(), $body);
@@ -389,6 +453,7 @@ class Connection
 
             if (json_last_error() === JSON_ERROR_NONE) {
                 $this->accessToken = array_key_exists('access_token', $body) ? $body['access_token'] : null;
+                $this->refreshToken = array_key_exists('refresh_token', $body) ? $body['refresh_token'] : null;
             } else {
                 throw new ApiException('Could not acquire tokens, json decode failed. Got response: ' . $response->getBody()->getContents());
             }
@@ -408,7 +473,7 @@ class Connection
      */
     private function parseExceptionForErrorMessages(Exception $exception)
     {
-        if (!$exception instanceof BadResponseException) {
+        if (! $exception instanceof BadResponseException) {
             return new ApiException($exception->getMessage(), 0, $exception);
         }
 
@@ -444,7 +509,7 @@ class Connection
     private function checkWhetherRateLimitHasBeenReached(ResponseInterface $response, $errorMessage)
     {
         $retryAfterHeaders = $response->getHeader('Retry-After');
-        if($response->getStatusCode() === 429 && count($retryAfterHeaders) > 0){
+        if ($response->getStatusCode() === 429 && count($retryAfterHeaders) > 0) {
             $exception = new TooManyRequestsException('Error ' . $response->getStatusCode() . ': ' . $errorMessage, $response->getStatusCode());
             $exception->retryAfterNumberOfSeconds = (int) current($retryAfterHeaders);
 
@@ -492,6 +557,7 @@ class Connection
     {
         $clone = clone $this;
         $clone->administrationId = $administrationId;
+
         return $clone;
     }
 
@@ -502,6 +568,7 @@ class Connection
     {
         $clone = clone $this;
         $clone->administrationId = null;
+
         return $clone;
     }
 
@@ -540,6 +607,4 @@ class Connection
     {
         $this->scopes = $scopes;
     }
-
 }
-

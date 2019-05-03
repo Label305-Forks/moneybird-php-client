@@ -1,21 +1,24 @@
-<?php namespace Picqer\Financials\Moneybird\Entities;
+<?php
 
-use Picqer\Financials\Moneybird\Actions\Removable;
+namespace Picqer\Financials\Moneybird\Entities;
+
+use Picqer\Financials\Moneybird\Model;
 use Picqer\Financials\Moneybird\Actions\Search;
-use Picqer\Financials\Moneybird\Actions\Storable;
 use Picqer\Financials\Moneybird\Actions\FindAll;
 use Picqer\Financials\Moneybird\Actions\FindOne;
+use Picqer\Financials\Moneybird\Actions\Storable;
+use Picqer\Financials\Moneybird\Actions\Removable;
 use Picqer\Financials\Moneybird\Actions\Synchronizable;
 use Picqer\Financials\Moneybird\Exceptions\ApiException;
-use Picqer\Financials\Moneybird\Model;
 
 /**
- * Class Contact
- * @package Picqer\Financials\Moneybird
+ * Class Contact.
+ *
+ * @property string $id
+ * @property ContactCustomField[] $custom_fields
  */
 class Contact extends Model
 {
-
     use Search, FindAll, FindOne, Storable, Removable, Synchronizable;
 
     /**
@@ -53,12 +56,15 @@ class Contact extends Model
         'credit_card_number',
         'credit_card_reference',
         'credit_card_type',
+        'invoice_workflow_id',
+        'estimate_workflow_id',
+        'email_ubl',
         'tax_number_validated_at',
         'created_at',
         'updated_at',
         'notes',
         'custom_fields',
-        'version'
+        'version',
     ];
 
     /**
@@ -76,7 +82,7 @@ class Contact extends Model
      */
     protected $multipleNestedEntities = [
         'custom_fields' => [
-            'entity' => 'ContactCustomField',
+            'entity' => ContactCustomField::class,
             'type' => self::NESTING_TYPE_NESTED_OBJECTS,
         ],
     ];
@@ -87,14 +93,15 @@ class Contact extends Model
      * @return static
      * @throws ApiException
      */
-    public function findByCustomerId($customerId) {
+    public function findByCustomerId($customerId)
+    {
         $result = $this->connection()->get($this->getEndpoint() . '/customer_id/' . urlencode($customerId));
 
         return $this->makeFromResponse($result);
     }
-    
+
     /**
-     * Add a note to the current contact
+     * Add a note to the current contact.
      *
      * @param Note $note
      * @return $this
@@ -105,7 +112,7 @@ class Contact extends Model
         $this->connection()->post($this->endpoint . '/' . $this->id . '/notes',
             $note->jsonWithNamespace()
         );
-	return $this;
-    }
 
+        return $this;
+    }
 }

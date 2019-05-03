@@ -1,10 +1,10 @@
 <?php
 
-use Picqer\Financials\Moneybird\Connection;
 use Picqer\Financials\Moneybird\Moneybird;
+use Picqer\Financials\Moneybird\Connection;
 
 /**
- * Class ApiTest
+ * Class ApiTest.
  *
  * Sets up a mocked Connection object. Each test case:
  *  - indicates what the mocked Connection object should expect when interacting with the Client / Entities
@@ -23,7 +23,7 @@ class ApiTest extends \PHPUnit_Framework_TestCase
     private $connection;
 
     /**
-     * Same as self::$connection, only differently typed to enable autocompletion in IDE
+     * Same as self::$connection, only differently typed to enable autocompletion in IDE.
      *
      * @var \PHPUnit_Framework_MockObject_MockObject
      */
@@ -119,5 +119,29 @@ class ApiTest extends \PHPUnit_Framework_TestCase
         $financialMutation = $this->client->financialMutation();
         $financialMutation->id = $financialMutationId;
         $this->assertEquals($httpResponseCode, $financialMutation->linkToBooking($bookingType, $bookingId, $priceBase));
+    }
+
+    /**
+     * @throws \Picqer\Financials\Moneybird\Exceptions\ApiException
+     */
+    public function testFinancialMutationUnlinkFromBooking()
+    {
+        $financialMutationId = 1;
+        $bookingType = 'LedgerAccountBooking';
+        $bookingId = 100;
+        $parameters = [
+            'booking_type' => $bookingType,
+            'booking_id' => $bookingId,
+        ];
+        $response = [];
+
+        $this->mockedConnection->expects($this->once())
+            ->method('delete')
+            ->with('financial_mutations/' . $financialMutationId . '/unlink_booking', json_encode($parameters))
+            ->will($this->returnValue($response));
+
+        $financialMutation = $this->client->financialMutation();
+        $financialMutation->id = $financialMutationId;
+        $this->assertEquals($response, $financialMutation->unlinkFromBooking($bookingType, $bookingId));
     }
 }
